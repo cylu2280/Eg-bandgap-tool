@@ -1,145 +1,153 @@
-
 <!DOCTYPE html>
-<html>
+<html lang="zh">
 <head>
-<meta charset="utf-8">
-<title>DRS Bandgap Calculator</title>
+<meta charset="UTF-8">
+<title>Band Gap Calculator</title>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
-body{font-family:Arial;margin:40px}
-button{padding:10px 20px;font-size:16px}
-canvas{max-width:900px;margin-top:30px}
+body{
+font-family:Arial;
+margin:40px;
+}
+h1{
+color:#333;
+}
+button{
+padding:10px 20px;
+font-size:16px;
+}
 </style>
+
 </head>
+
 <body>
 
-<h2>DRS Bandgap Calculator (Tauc)</h2>
-<p>Load UH5700 %R text file → automatic Eg calculation</p>
+<h1>能隙 (Band Gap) 自动计算工具</h1>
 
-<input type="file" id="file">
-<select id="mode">
-<option value="indirect">Indirect (TiO₂)</option>
-<option value="direct">Direct</option>
-</select>
-<button onclick="run()">Calculate</button>
+<p>给中山医公卫学生使用</p>
 
-<h3 id="result"></h3>
+<p>
+上传 UH5700 %R 数据文件
+</p>
 
-<canvas id="chart"></canvas>
+<input type="file" id="fileInput">
+
+<br><br>
+
+<button onclick="process()">计算 Eg</button>
+
+<h2 id="result"></h2>
+
+<canvas id="chart" width="800" height="400"></canvas>
 
 <script>
 
-function km(R){
-return ((1-R)*(1-R))/(2*R)
-}
+function process(){
 
-function run(){
+const file = document.getElementById('fileInput').files[0];
 
-let file=document.getElementById("file").files[0]
-if(!file){alert("Select file");return}
+const reader = new FileReader();
 
-let reader=new FileReader()
+reader.onload=function(e){
 
-reader.onload=function(){
+const text=e.target.result;
 
-let text=reader.result.split(/\r?\n/)
+const lines=text.split('\n');
 
-let wl=[]
-let R=[]
+let hv=[];
+let y=[];
 
-let start=false
+for(let line of lines){
 
-for(let line of text){
+let parts=line.trim().split(/\s+/);
 
-let s=line.trim()
+if(parts.length==2){
 
-if(s.toLowerCase().startsWith("nm")){
-start=true
-continue
-}
+let wl=parseFloat(parts[0]);
+let R=parseFloat(parts[1]);
 
-if(start){
-let p=s.split(/\s+/)
-if(p.length>=2){
-let w=parseFloat(p[0])
-let r=parseFloat(p[1])
-if(!isNaN(w)&&!isNaN(r)){
-wl.push(w)
-R.push(r/100)
-}
-}
+if(!isNaN(wl)&&!isNaN(R)){
+
+R=R/100;
+
+let F=((1-R)*(1-R))/(2*R);
+
+let energy=1240/wl;
+
+hv.push(energy);
+
+y.push(Math.sqrt(F*energy));
+
 }
 
 }
 
-let hv=[]
-let y=[]
+}
 
-let mode=document.getElementById("mode").value
+draw(hv,y);
 
-for(let i=0;i<wl.length;i++){
+let Eg=estimateEg(hv,y);
 
-let e=1240/wl[i]
-let F=km(R[i])
+let msg="Eg = "+Eg.toFixed(3)+" eV";
 
-hv.push(e)
+if(Eg<1||Eg>4){
+msg+="  ⚠ 请找老师讨论";
+}
 
-if(mode=="indirect")
-y.push(Math.sqrt(F*e))
-else
-y.push(Math.pow(F*e,2))
+document.getElementById("result").innerText=msg;
+
+};
+
+reader.readAsText(file);
 
 }
 
-let idx=[...hv.keys()].sort((a,b)=>hv[a]-hv[b])
-hv=idx.map(i=>hv[i])
-y=idx.map(i=>y[i])
+function estimateEg(x,y){
 
-let i1=Math.floor(hv.length*0.55)
-let i2=Math.floor(hv.length*0.75)
+let maxSlope=0;
+let Eg=0;
 
-let xs=hv.slice(i1,i2)
-let ys=y.slice(i1,i2)
+for(let i=1;i<x.length;i++){
 
-let sx=0,sy=0,sxx=0,sxy=0,n=xs.length
+let slope=(y[i]-y[i-1])/(x[i]-x[i-1]);
 
-for(let i=0;i<n;i++){
-sx+=xs[i]
-sy+=ys[i]
-sxx+=xs[i]*xs[i]
-sxy+=xs[i]*ys[i]
+if(slope>maxSlope){
+maxSlope=slope;
+Eg=x[i]-y[i]/slope;
 }
 
-let m=(n*sxy-sx*sy)/(n*sxx-sx*sx)
-let b=(sy-m*sx)/n
+}
 
-let Eg=-b/m
+return Eg;
 
-document.getElementById("result").innerHTML="Eg ≈ "+Eg.toFixed(3)+" eV"
+}
 
-let ctx=document.getElementById("chart")
+function draw(x,y){
 
-new Chart(ctx,{
-type:"line",
+new Chart(document.getElementById("chart"),{
+
+type:'line',
+
 data:{
-labels:hv,
+labels:x,
 datasets:[{
-label:"Tauc",
+label:'Tauc Plot',
 data:y,
-borderWidth:2,
-pointRadius:0
+borderColor:'blue',
+fill:false
 }]
 },
+
 options:{
 scales:{
-x:{title:{display:true,text:"hv (eV)"}},
-y:{title:{display:true,text:"Tauc"}}}
+x:{title:{display:true,text:'hv (eV)'}},
+y:{title:{display:true,text:'(F(R)hv)^1/2'}}
 }
-})
-
 }
 
-reader.readAsText(file)
+});
 
 }
 
