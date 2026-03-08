@@ -1,0 +1,149 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>DRS Bandgap Calculator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{font-family:Arial;margin:40px}
+button{padding:10px 20px;font-size:16px}
+canvas{max-width:900px;margin-top:30px}
+</style>
+</head>
+<body>
+
+<h2>DRS Bandgap Calculator (Tauc)</h2>
+<p>Load UH5700 %R text file → automatic Eg calculation</p>
+
+<input type="file" id="file">
+<select id="mode">
+<option value="indirect">Indirect (TiO₂)</option>
+<option value="direct">Direct</option>
+</select>
+<button onclick="run()">Calculate</button>
+
+<h3 id="result"></h3>
+
+<canvas id="chart"></canvas>
+
+<script>
+
+function km(R){
+return ((1-R)*(1-R))/(2*R)
+}
+
+function run(){
+
+let file=document.getElementById("file").files[0]
+if(!file){alert("Select file");return}
+
+let reader=new FileReader()
+
+reader.onload=function(){
+
+let text=reader.result.split(/\r?\n/)
+
+let wl=[]
+let R=[]
+
+let start=false
+
+for(let line of text){
+
+let s=line.trim()
+
+if(s.toLowerCase().startsWith("nm")){
+start=true
+continue
+}
+
+if(start){
+let p=s.split(/\s+/)
+if(p.length>=2){
+let w=parseFloat(p[0])
+let r=parseFloat(p[1])
+if(!isNaN(w)&&!isNaN(r)){
+wl.push(w)
+R.push(r/100)
+}
+}
+}
+
+}
+
+let hv=[]
+let y=[]
+
+let mode=document.getElementById("mode").value
+
+for(let i=0;i<wl.length;i++){
+
+let e=1240/wl[i]
+let F=km(R[i])
+
+hv.push(e)
+
+if(mode=="indirect")
+y.push(Math.sqrt(F*e))
+else
+y.push(Math.pow(F*e,2))
+
+}
+
+let idx=[...hv.keys()].sort((a,b)=>hv[a]-hv[b])
+hv=idx.map(i=>hv[i])
+y=idx.map(i=>y[i])
+
+let i1=Math.floor(hv.length*0.55)
+let i2=Math.floor(hv.length*0.75)
+
+let xs=hv.slice(i1,i2)
+let ys=y.slice(i1,i2)
+
+let sx=0,sy=0,sxx=0,sxy=0,n=xs.length
+
+for(let i=0;i<n;i++){
+sx+=xs[i]
+sy+=ys[i]
+sxx+=xs[i]*xs[i]
+sxy+=xs[i]*ys[i]
+}
+
+let m=(n*sxy-sx*sy)/(n*sxx-sx*sx)
+let b=(sy-m*sx)/n
+
+let Eg=-b/m
+
+document.getElementById("result").innerHTML="Eg ≈ "+Eg.toFixed(3)+" eV"
+
+let ctx=document.getElementById("chart")
+
+new Chart(ctx,{
+type:"line",
+data:{
+labels:hv,
+datasets:[{
+label:"Tauc",
+data:y,
+borderWidth:2,
+pointRadius:0
+}]
+},
+options:{
+scales:{
+x:{title:{display:true,text:"hv (eV)"}},
+y:{title:{display:true,text:"Tauc"}}}
+}
+})
+
+}
+
+reader.readAsText(file)
+
+}
+
+</script>
+
+</body>
+</html>
